@@ -40,3 +40,7 @@ print("Press any key in the image window to close.")
 
 cv2.waitKey(0)
 cv2.destroyAllWindows()
+
+# 3.56(214 sec) - 4:56 (296 sec) minutes for final homography.py edit
+# 0 - 30sec: for loading intrinsic calibration data/frames
+# use time stamps for each port hole
