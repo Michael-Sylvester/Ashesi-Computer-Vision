@@ -1,73 +1,74 @@
 import cv2
 import numpy as np
+import sys
 
-# 1. Load Calibration
+# 1. LOAD CALIBRATION
 with np.load('calibration_data.npz') as data:
     mtx = data['mtx']
     dist = data['dist']
 
-# 2. Setup Video and Timestamp
-video_path = 'road_video.MOV' # Make sure this matches your file name!
+# 2. CONFIGURATION
+video_path = 'road_video.MOV'
+start_sec = 214
+end_sec = 296
+
+# Your captured 1x1m patch points (Pixel Coordinates)
+src_pts = np.float32([[205, 560], [395, 548], [355, 573], [140, 586]])
+
+# --- METRIC LANDSCAPE CANVAS (10px = 1cm) ---
+# Total: 5.5m Wide x 3m High
+out_w, out_h = 5500, 3000 
+
+# Positioning: Patch starts 50cm from left, 50cm from top
+x_offset = 500 
+y_offset = 500
+
+dst_pts = np.float32([
+    [x_offset, y_offset],               # TL
+    [x_offset + 1000, y_offset],        # TR
+    [x_offset + 1000, y_offset + 1000], # BR
+    [x_offset, y_offset + 1000]         # BL
+])
+
+M = cv2.getPerspectiveTransform(src_pts, dst_pts)
+
+# 3. INITIALIZE VIDEO
 cap = cv2.VideoCapture(video_path)
 fps = cap.get(cv2.CAP_PROP_FPS)
+total_frames = int((end_sec - start_sec) * fps)
+cap.set(cv2.CAP_PROP_POS_FRAMES, int(start_sec * fps))
 
-# Jump to 214 seconds
-start_frame = int(221 * fps)
-cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+out = cv2.VideoWriter('road_rectified_FINAL.mp4', fourcc, fps, (out_w, out_h))
 
-ret, frame = cap.read()
+print(f"Processing {total_frames} frames into a 5.5m x 3m Metric Map...")
+
+while cap.get(cv2.CAP_PROP_POS_FRAMES) < int(296 * fps):
+    ret, frame = cap.read()
+    if not ret: break
+    
+    # Intrinsic + Extrinsic Transform
+    undistorted = cv2.undistort(frame, mtx, dist, None, mtx)
+    warped = cv2.warpPerspective(undistorted, M, (out_w, out_h))
+    
+    # 4. DRAW METRIC GRID (Visual Evidence)
+    # Draw faint lines every 10cm, Bold lines every 1m
+    for x in range(0, out_w, 100):
+        thickness = 3 if x % 1000 == 0 else 1
+        cv2.line(warped, (x, 0), (x, out_h), (200, 200, 200), thickness)
+    for y in range(0, out_h, 100):
+        thickness = 3 if y % 1000 == 0 else 1
+        cv2.line(warped, (0, y), (out_w, y), (200, 200, 200), thickness)
+
+    out.write(warped)
+    
+    # Resize preview for your monitor
+    preview = cv2.resize(warped, (int(out_w * 0.15), int(out_h * 0.15)))
+    cv2.imshow('Sprint 1: Rectified Metric Map', preview)
+    
+    if cv2.waitKey(1) & 0xFF == ord('q'): break
+
 cap.release()
-
-if not ret:
-    print("Error reading video.")
-    exit()
-
-# 3. Undistort
-h, w = frame.shape[:2]
-new_mtx, _ = cv2.getOptimalNewCameraMatrix(mtx, dist, (w,h), 1, (w,h))
-undistorted_frame = cv2.undistort(frame, mtx, dist, None, new_mtx)
-
-# 4. Point Picking Logic
-display_frame = cv2.resize(undistorted_frame, (int(w*0.4), int(h*0.4)))
-points = []
-
-def get_birds_eye(img, src_points):
-    """
-    This function takes your 4 clicked points and stretches them 
-    into a top-down rectangle.
-    """
-    # Define the output size in pixels
-    # Let's assume you want a 500x800 pixel top-down view
-    out_w, out_h = 500, 500
-    
-    # Target points: A perfect rectangle
-    dst_points = np.float32([
-        [0, 0],         # Top Left
-        [out_w, 0],     # Top Right
-        [out_w, out_h], # Bottom Right
-        [0, out_h]      # Bottom Left
-    ])
-    
-    # Calculate Matrix and Warp
-    M = cv2.getPerspectiveTransform(np.float32(src_points), dst_points)
-    warped = cv2.warpPerspective(img, M, (out_w, out_h))
-    return warped
-
-def click_event(event, x, y, flags, params):
-    global display_frame
-    if event == cv2.EVENT_LBUTTONDOWN:
-        real_x, real_y = int(x / 0.4), int(y / 0.4)
-        points.append([real_x, real_y])
-        cv2.circle(display_frame, (x, y), 5, (0, 255, 0), -1)
-        cv2.imshow('1. Click 4 Corners (TL, TR, BR, BL)', display_frame)
-        
-        if len(points) == 4:
-            print(f"Points captured: {points}")
-            result = get_birds_eye(undistorted_frame, points)
-            cv2.imshow('2. Bird\'s Eye View (Sprint 1 Result)', result)
-            print("Look at the result. Are the road lines parallel? (Press any key to exit)")
-
-cv2.imshow('1. Click 4 Corners (TL, TR, BR, BL)', display_frame)
-cv2.setMouseCallback('1. Click 4 Corners (TL, TR, BR, BL)', click_event)
-cv2.waitKey(0)
+out.release()
 cv2.destroyAllWindows()
+print("\nDone! Video saved as road_rectified_FINAL.mp4")

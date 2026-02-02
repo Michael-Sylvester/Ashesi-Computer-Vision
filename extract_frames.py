@@ -2,9 +2,11 @@ import cv2
 import os
 
 # 1. Setup paths
-video_path = 'checkerboard.MOV'
-output_folder = 'calibration_frames'
+#video_path = 'checkerboard.MOV'
+# output_folder = 'calibration_frames'
 
+video_path = 'road_rectified.mp4'
+output_folder = 'rectified_frames'
 if not os.path.exists(output_folder):
     os.makedirs(output_folder)
 
