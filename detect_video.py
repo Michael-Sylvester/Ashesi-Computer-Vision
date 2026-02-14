@@ -15,7 +15,7 @@ BEV_HEIGHT = 1000
 
 # Calibration: 10 pixels = 1 cm²
 PIXELS_PER_CM2 = 10
-MIN_AREA_CM2 = 400
+MIN_AREA_CM2 = 1000
 
 
 def detect_potholes(bev, valid_mask, flat_l):
